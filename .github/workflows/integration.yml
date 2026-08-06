@@ -194,6 +194,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive
+          lfs: true
           persist-credentials: false
       - run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
       - run: scripts/write-ci-google-service-info.sh scphub/scphub/GoogleService-Info.plist
