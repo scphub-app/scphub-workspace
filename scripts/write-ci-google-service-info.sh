@@ -15,7 +15,7 @@ cat >"$output_path" <<'PLIST'
 <plist version="1.0">
 <dict>
   <key>API_KEY</key>
-  <string>ci-placeholder-not-a-real-api-key</string>
+  <string>A00000000000000000000000000000000000000</string>
   <key>GCM_SENDER_ID</key>
   <string>000000000000</string>
   <key>PLIST_VERSION</key>
