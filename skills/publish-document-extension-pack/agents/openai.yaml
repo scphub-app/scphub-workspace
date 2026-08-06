@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布文档扩展包"
+  short_description: "为 SCPHub 构建、校验、发布并验证文档扩展包"
+  default_prompt: "使用 $publish-document-extension-pack 构建、校验、发布并验证一个新的 SCPHub 文档扩展包。"

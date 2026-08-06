@@ -1,0 +1,12 @@
+[submodule "scphub"]
+	path = scphub
+	url = https://github.com/scphub-app/scphub.git
+	branch = main
+[submodule "scphub-backend"]
+	path = scphub-backend
+	url = https://github.com/scphub-app/scphub-backend.git
+	branch = main
+[submodule "tools"]
+	path = tools
+	url = https://github.com/scphub-app/scphub-tools.git
+	branch = main

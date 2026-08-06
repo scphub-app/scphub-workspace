@@ -1,0 +1,251 @@
+name: Integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHECKOUT_SHA: 11d5960a326750d5838078e36cf38b85af677262
+  APP_TOKEN_SHA: fee1f7d63c2ff003460e3d139729b119787bc349
+  SETUP_NODE_SHA: 49933ea5288caeca8642d1e84afbd3f7d6820020
+
+jobs:
+  metadata:
+    name: Detect gitlink changes
+    runs-on: ubuntu-latest
+    outputs:
+      scphub: ${{ steps.changes.outputs.scphub }}
+      backend: ${{ steps.changes.outputs.backend }}
+      tools: ${{ steps.changes.outputs.tools }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            changed=$'scphub\nscphub-backend\ntools'
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            changed="$(git diff --name-only "$PR_BASE" "$PR_HEAD")"
+          else
+            changed="$(git diff --name-only "$PUSH_BEFORE" "$PUSH_HEAD")"
+          fi
+          for entry in 'scphub:scphub' 'backend:scphub-backend' 'tools:tools'; do
+            key="${entry%%:*}"
+            path="${entry#*:}"
+            value=false
+            grep -Fxq "$path" <<<"$changed" && value=true
+            echo "$key=$value" >>"$GITHUB_OUTPUT"
+          done
+
+  hygiene:
+    name: Root repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: scripts/check-root-hygiene.sh
+      - run: scripts/validate-submodules.sh
+
+  validate-submodules:
+    name: Validate private submodule commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: scphub-app
+          repositories: |
+            scphub-workspace
+            scphub
+            scphub-backend
+            scphub-tools
+          permission-contents: read
+      - env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          scripts/validate-submodules.sh
+          for mapping in 'scphub:scphub' 'scphub-backend:scphub-backend' 'tools:scphub-tools'; do
+            path="${mapping%%:*}"
+            repo="${mapping#*:}"
+            sha="$(git ls-files -s -- "$path" | awk '{print $2}')"
+            status="$(gh api "repos/scphub-app/$repo/compare/$sha...main" --jq .status)"
+            if [[ "$status" != "ahead" && "$status" != "identical" ]]; then
+              echo "$path gitlink $sha is not in scphub-app/$repo main history" >&2
+              exit 1
+            fi
+          done
+
+  tools:
+    name: Tools / Node and Swift
+    needs: metadata
+    if: needs.metadata.outputs.tools == 'true'
+    runs-on: macos-15
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: scphub-app
+          repositories: |
+            scphub-workspace
+            scphub
+            scphub-backend
+            scphub-tools
+          permission-contents: read
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+      - run: npm ci
+        working-directory: tools
+      - run: npm test
+        working-directory: tools
+      - run: swift test --disable-sandbox --package-path tools/site-pack-builder
+
+  backend:
+    name: Backend / Node and Wrangler
+    needs: metadata
+    if: needs.metadata.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: scphub-app
+          repositories: |
+            scphub-workspace
+            scphub
+            scphub-backend
+            scphub-tools
+          permission-contents: read
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scphub-backend/package-lock.json
+      - run: npm ci
+        working-directory: scphub-backend
+      - run: npm test
+        working-directory: scphub-backend
+      - run: npm install --global wrangler@4.85.0
+      - run: npm run dry-run
+        working-directory: scphub-backend
+
+  app:
+    name: App / XCTest and unsigned builds
+    needs: metadata
+    if: needs.metadata.outputs.scphub == 'true'
+    runs-on: macos-15
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: scphub-app
+          repositories: |
+            scphub-workspace
+            scphub
+            scphub-backend
+            scphub-tools
+          permission-contents: read
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          submodules: recursive
+          persist-credentials: false
+      - run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+      - run: scripts/write-ci-google-service-info.sh scphub/scphub/GoogleService-Info.plist
+      - name: Run all XCTest on iOS Simulator
+        run: >-
+          xcodebuild test
+          -project scphub/scphub.xcodeproj
+          -scheme scphub
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.2'
+          CODE_SIGNING_ALLOWED=NO
+      - name: Build iOS without signing
+        run: >-
+          xcodebuild build
+          -project scphub/scphub.xcodeproj
+          -scheme scphub
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+      - name: Build macOS without signing
+        run: >-
+          xcodebuild build
+          -project scphub/scphub.xcodeproj
+          -scheme scphub
+          -destination 'generic/platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+
+  integration-gate:
+    name: integration-gate
+    if: always()
+    needs:
+      - metadata
+      - hygiene
+      - validate-submodules
+      - tools
+      - backend
+      - app
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          METADATA_RESULT: ${{ needs.metadata.result }}
+          HYGIENE_RESULT: ${{ needs.hygiene.result }}
+          VALIDATE_RESULT: ${{ needs.validate-submodules.result }}
+          TOOLS_CHANGED: ${{ needs.metadata.outputs.tools }}
+          TOOLS_RESULT: ${{ needs.tools.result }}
+          BACKEND_CHANGED: ${{ needs.metadata.outputs.backend }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          APP_CHANGED: ${{ needs.metadata.outputs.scphub }}
+          APP_RESULT: ${{ needs.app.result }}
+        run: |
+          set -euo pipefail
+          [[ "$METADATA_RESULT" == success ]]
+          [[ "$HYGIENE_RESULT" == success ]]
+          [[ "$VALIDATE_RESULT" == success ]]
+          [[ "$TOOLS_CHANGED" != true || "$TOOLS_RESULT" == success ]]
+          [[ "$BACKEND_CHANGED" != true || "$BACKEND_RESULT" == success ]]
+          [[ "$APP_CHANGED" != true || "$APP_RESULT" == success ]]

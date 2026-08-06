@@ -1,0 +1,51 @@
+name: Dependabot submodule auto-merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require a gitsubmodule-only PR
+        if: steps.metadata.outputs.package-ecosystem == 'gitsubmodule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files="$(gh api --paginate --slurp "repos/$REPOSITORY/pulls/$PR_NUMBER/files")"
+          jq -e '
+            add
+            | length > 0
+            and all(.[];
+              (.filename == "scphub" or .filename == "scphub-backend" or .filename == "tools")
+              and .status == "modified"
+              and (.patch // "" | test("Subproject commit [0-9a-f]{40}"))
+            )
+          ' <<<"$files"
+      - name: Enable squash auto-merge
+        if: steps.metadata.outputs.package-ecosystem == 'gitsubmodule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"
