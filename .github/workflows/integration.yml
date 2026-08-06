@@ -224,6 +224,7 @@ jobs:
           done
       - run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
       - run: scripts/write-ci-google-service-info.sh scphub/scphub/GoogleService-Info.plist
+      - run: rm -rf ~/Library/Developer/Xcode/DerivedData
       - name: Run all XCTest on iOS Simulator
         run: >-
           xcodebuild test
@@ -231,6 +232,7 @@ jobs:
           -scheme scphub
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.2'
           CODE_SIGNING_ALLOWED=NO
+          COMPRESS_PNG_FILES=NO
       - name: Build iOS without signing
         run: >-
           xcodebuild build
@@ -238,6 +240,7 @@ jobs:
           -scheme scphub
           -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO
+          COMPRESS_PNG_FILES=NO
       - name: Build macOS without signing
         run: >-
           xcodebuild build
@@ -245,6 +248,7 @@ jobs:
           -scheme scphub
           -destination 'generic/platform=macOS'
           CODE_SIGNING_ALLOWED=NO
+          COMPRESS_PNG_FILES=NO
 
   integration-gate:
     name: integration-gate
