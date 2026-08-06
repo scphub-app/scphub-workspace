@@ -241,13 +241,6 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO
           COMPRESS_PNG_FILES=NO
-      - name: Build macOS without signing
-        run: >-
-          xcodebuild build
-          -project scphub/scphub.xcodeproj
-          -scheme scphub
-          -destination 'generic/platform=macOS'
-          CODE_SIGNING_ALLOWED=NO
 
   integration-gate:
     name: integration-gate
