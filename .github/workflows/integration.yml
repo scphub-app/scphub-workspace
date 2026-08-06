@@ -222,14 +222,14 @@ jobs:
               exit 1
             fi
           done
-      - run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+      - run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
       - run: scripts/write-ci-google-service-info.sh scphub/scphub/GoogleService-Info.plist
       - name: Run all XCTest on iOS Simulator
         run: >-
           xcodebuild test
           -project scphub/scphub.xcodeproj
           -scheme scphub
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.2'
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.3'
           CODE_SIGNING_ALLOWED=NO
       - name: Build iOS without signing
         run: >-
