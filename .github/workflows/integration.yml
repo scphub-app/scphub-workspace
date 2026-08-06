@@ -248,7 +248,6 @@ jobs:
           -scheme scphub
           -destination 'generic/platform=macOS'
           CODE_SIGNING_ALLOWED=NO
-          COMPRESS_PNG_FILES=NO
 
   integration-gate:
     name: integration-gate
