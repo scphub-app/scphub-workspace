@@ -229,7 +229,7 @@ jobs:
           xcodebuild test
           -project scphub/scphub.xcodeproj
           -scheme scphub
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.3'
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.2'
           CODE_SIGNING_ALLOWED=NO
       - name: Build iOS without signing
         run: >-
