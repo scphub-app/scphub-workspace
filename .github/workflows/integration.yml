@@ -14,11 +14,6 @@ concurrency:
   group: integration-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  CHECKOUT_SHA: 11d5960a326750d5838078e36cf38b85af677262
-  APP_TOKEN_SHA: fee1f7d63c2ff003460e3d139729b119787bc349
-  SETUP_NODE_SHA: 49933ea5288caeca8642d1e84afbd3f7d6820020
-
 jobs:
   metadata:
     name: Detect gitlink changes
@@ -28,7 +23,7 @@ jobs:
       backend: ${{ steps.changes.outputs.backend }}
       tools: ${{ steps.changes.outputs.tools }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -60,7 +55,7 @@ jobs:
     name: Root repository hygiene
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -71,11 +66,11 @@ jobs:
     name: Validate private submodule commits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.CI_APP_ID }}
           private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
@@ -109,7 +104,7 @@ jobs:
     runs-on: macos-15
     steps:
       - id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.CI_APP_ID }}
           private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
@@ -120,12 +115,12 @@ jobs:
             scphub-backend
             scphub-tools
           permission-contents: read
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -143,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.CI_APP_ID }}
           private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
@@ -154,12 +149,12 @@ jobs:
             scphub-backend
             scphub-tools
           permission-contents: read
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -179,7 +174,7 @@ jobs:
     runs-on: macos-15
     steps:
       - id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.CI_APP_ID }}
           private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
@@ -190,12 +185,43 @@ jobs:
             scphub-backend
             scphub-tools
           permission-contents: read
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           submodules: recursive
-          lfs: true
-          persist-credentials: false
+          persist-credentials: true
+      - name: Fetch App Git LFS objects
+        run: git -C scphub lfs pull
+      - name: Remove checkout credentials before tests
+        if: always()
+        run: |
+          set -euo pipefail
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git submodule foreach --recursive \
+            'git config --local --unset-all http.https://github.com/.extraheader || :'
+          git config --global --unset-all http.https://github.com/.extraheader || true
+          git config --global --unset-all url.https://github.com/.insteadOf || true
+
+          if git config --local --get-all http.https://github.com/.extraheader; then
+            echo "Root checkout credential remains configured" >&2
+            exit 1
+          fi
+          if git config --global --get-all http.https://github.com/.extraheader; then
+            echo "Global checkout credential remains configured" >&2
+            exit 1
+          fi
+          git submodule foreach --recursive \
+            'test -z "$(git config --local --get-all http.https://github.com/.extraheader || :)"'
+      - name: Verify App LFS working tree
+        run: |
+          set -euo pipefail
+          git -C scphub lfs fsck
+          git -C scphub lfs ls-files --name-only | while IFS= read -r lfs_path; do
+            if LC_ALL=C grep -aqm1 '^version https://git-lfs.github.com/spec/v1$' "scphub/$lfs_path"; then
+              echo "LFS pointer was not materialized: $lfs_path" >&2
+              exit 1
+            fi
+          done
       - run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
       - run: scripts/write-ci-google-service-info.sh scphub/scphub/GoogleService-Info.plist
       - name: Run all XCTest on iOS Simulator
